@@ -524,49 +524,6 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
-  createEffect(
-    on(
-      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
-      (value) => {
-        if (!value.ready) return
-        if (!value.layoutReady) return
-        if (!value.dir) return
-        if (currentProject()) return
-
-        const decoded = decode64(value.dir)
-        if (!decoded) {
-          navigateWithSidebarReset("/")
-          return
-        }
-
-        const root = projectRoot(decoded)
-        const project = value.list.find((item) => item.worktree === root)
-        if (project) {
-          openProject(project.worktree, false)
-          navigateToProject(project.worktree)
-          return
-        }
-
-        const last = server.projects.last()
-        if (last) {
-          openProject(last, false)
-          navigateToProject(last)
-          return
-        }
-
-        const next = value.list[0]
-        if (next) {
-          openProject(next.worktree, false)
-          navigateToProject(next.worktree)
-          return
-        }
-
-        navigateWithSidebarReset("/")
-      },
-      { defer: true },
-    ),
-  )
-
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
     const direct = store.workspaceName[key] ?? store.workspaceName[directory]
