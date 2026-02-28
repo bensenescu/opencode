@@ -524,6 +524,49 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
+      (value) => {
+        if (!value.ready) return
+        if (!value.layoutReady) return
+        if (!value.dir) return
+        if (currentProject()) return
+
+        const decoded = decode64(value.dir)
+        if (!decoded) {
+          navigateWithSidebarReset("/")
+          return
+        }
+
+        const root = projectRoot(decoded)
+        const project = value.list.find((item) => item.worktree === root)
+        if (project) {
+          openProject(project.worktree, false)
+          navigateToProject(project.worktree)
+          return
+        }
+
+        const last = server.projects.last()
+        if (last) {
+          openProject(last, false)
+          navigateToProject(last)
+          return
+        }
+
+        const next = value.list[0]
+        if (next) {
+          openProject(next.worktree, false)
+          navigateToProject(next.worktree)
+          return
+        }
+
+        navigateWithSidebarReset("/")
+      },
+      { defer: true },
+    ),
+  )
+
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
     const direct = store.workspaceName[key] ?? store.workspaceName[directory]
@@ -1100,20 +1143,30 @@ export default function Layout(props: ParentProps) {
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
     const dirs = Array.from(new Set([root, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
+    const allowed = new Set(dirs)
     const openSession = async (target: { directory: string; id: string }) => {
+      if (!allowed.has(target.directory)) return false
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
       const next = resolved?.directory ? resolved : target
+      if (!allowed.has(next.directory)) return false
       setStore("lastProjectSession", root, { directory: next.directory, id: next.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(next.directory)}/session/${next.id}`)
+      return true
     }
 
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
-      await openSession(projectSession)
-      return
+      const ok = await openSession(projectSession)
+      if (ok) return
+      setStore(
+        "lastProjectSession",
+        produce((draft) => {
+          delete draft[root]
+        }),
+      )
     }
 
     const latest = latestRootSession(
@@ -1121,8 +1174,8 @@ export default function Layout(props: ParentProps) {
       Date.now(),
     )
     if (latest) {
-      await openSession(latest)
-      return
+      const ok = await openSession(latest)
+      if (ok) return
     }
 
     const fetched = latestRootSession(
@@ -1138,8 +1191,8 @@ export default function Layout(props: ParentProps) {
       Date.now(),
     )
     if (fetched) {
-      await openSession(fetched)
-      return
+      const ok = await openSession(fetched)
+      if (ok) return
     }
 
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)

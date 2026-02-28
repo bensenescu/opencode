@@ -498,7 +498,11 @@ export namespace Worktree {
     if (branch) {
       const deleted = await $`git branch -D ${branch}`.quiet().nothrow().cwd(Instance.worktree)
       if (deleted.exitCode !== 0) {
-        throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
+        log.warn("worktree branch cleanup failed", {
+          directory: entry.path,
+          branch,
+          message: errorText(deleted) || "Failed to delete worktree branch",
+        })
       }
     }
 
